@@ -13,6 +13,7 @@ using System.Reflection;
 using System.Data.Entity.Infrastructure;
 using System.Data.Entity.Core.Objects;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel;
 
 namespace HyperSlackers.AspNet.Identity.EntityFramework
 {
@@ -26,11 +27,78 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         where TAudit : Audit<TKey>, new()
         where TAuditItem : AuditItem<TKey>, new()
     {
-        private bool disableAuditing = false;
-        public TKey HostId { get; private set; } // only used for multi-host systems
-        public string HostName { get; private set; }
-        public TKey UserId { get; private set; }
-        public string UserName { get; private set; }
+        private static bool disableAuditing = false;
+        private bool auditFieldsInitialized = false;
+        // lazy load these guys so we don't have to force them as constructor params or call virtual method in constructor
+        private TKey hostId; // only used for multi-host systems
+        public TKey HostId
+        {
+            get
+            {
+                if (hostId.Equals(default(TKey)))
+                {
+                    hostId = GetHostId();
+                }
+
+                return hostId;
+            }
+            protected set
+            {
+                hostId = value;
+            }
+        }
+        private string hostName;
+        public string HostName
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(hostName))
+                {
+                    hostName = GetHostName();
+                }
+
+                return hostName;
+            }
+            protected set
+            {
+                hostName = value;
+            }
+        }
+        private TKey userId;
+        public TKey UserId
+        {
+            get
+            {
+                if (userId.Equals(default(TKey)))
+                {
+                    userId = GetUserId();
+                }
+
+                return userId;
+            }
+            protected set
+            {
+                userId = value;
+            }
+        }
+        private string userName;
+        public string UserName
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(userName))
+                {
+                    userName = GetUserName();
+                }
+
+                return userName;
+            }
+            protected set
+            {
+                userName = value;
+            }
+        }
+        public DateTime auditDate;
 
         // table/schema renaming
         public virtual string AuditSchemaName { get { return ""; } }
@@ -48,17 +116,28 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         public DbSet<TAuditItem> AuditItems { get; set; }
         public DbSet<AuditProperty> AuditProperties { get; set; }
 
-        protected AuditingDbContext(bool disableAuditing = false)
-            : this("DefaultConnection", disableAuditing)
+        protected AuditingDbContext()
+            : this("DefaultConnection")
         {
         }
 
-        protected AuditingDbContext(string nameOrConnectionString, bool disableAuditing = false)
+        protected AuditingDbContext(string nameOrConnectionString)
             : base(nameOrConnectionString)
         {
             Contract.Requires<ArgumentNullException>(!nameOrConnectionString.IsNullOrWhiteSpace(), "nameOrConnectionString");
+        }
 
-            this.disableAuditing = disableAuditing;
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static bool DisableAuditing
+        {
+            get
+            {
+                return disableAuditing;
+            }
+            set
+            {
+                disableAuditing = value;
+            }
         }
 
         protected virtual TKey GetHostId()
@@ -166,33 +245,42 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         /// </returns>
         public override int SaveChanges()
         {
-            // short-circuit if disabled
-            if (this.disableAuditing)
+            // even though these are lazy loaded, we don't want to churn on them when they have a default value
+            if (!auditFieldsInitialized)
             {
-                return base.SaveChanges();
+                // these may have been set by derived class
+                if (this.hostId.Equals(default(TKey)))
+                {
+                    this.hostId = GetHostId();
+                }
+                if (this.hostName.IsNullOrWhiteSpace())
+                {
+                    this.hostName = GetHostName();
+                }
+                if (this.userId.Equals(default(TKey)))
+                {
+                    this.userId = GetUserId();
+                }
+                if (this.userName.IsNullOrWhiteSpace())
+                {
+                    this.userName = GetUserName();
+                }
+
+                auditFieldsInitialized = true;
             }
 
-            // make sure we have what we need
-            if (this.HostId.Equals(default(TKey)))
-            {
-                this.HostId = GetHostId();
-            }
-            if (this.HostName.IsNullOrWhiteSpace())
-            {
-                this.HostName = GetHostName();
-            }
-            if (this.UserId.Equals(default(TKey)))
-            {
-                this.UserId = GetUserId();
-            }
-            if (this.UserName.IsNullOrWhiteSpace())
-            {
-                this.UserName = GetUserName();
-            }
+            // set this on each call so that multiple call to save changes each get a new time
+            this.auditDate = DateTime.Now;
 
             ChangeTracker.DetectChanges(); //! important to call this prior to auditing, etc.
 
             UpdateAuditUserAndDateFields(); // last changed date/by, created date/by, etc...
+
+            // short-circuit if disabled
+            if (disableAuditing)
+            {
+                return base.SaveChanges();
+            }
 
             CreateAuditRecords(); // create audit data and hold it until after we save user's changes
 
@@ -281,11 +369,17 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                 .OrderByDescending(a => a.AuditDate)
                 .ToArray();
 
+            var auditProperty = GetAuditProperty(entity, propertyName);
+            if (auditProperty == null)
+            {
+                // property not logged, or does not exist
+                return versions.ToArray();
+            }
+
             foreach (var audit in audits)
             {
                 var auditItems = this.AuditItems
-                    .Where(i => i.AuditId == audit.Id && i.Entity1Id.Equals(entity.Id) && i.AuditProperty.PropertyName == propertyName);
-
+                    .Where(i => i.AuditId == audit.Id && i.Entity1Id.Equals(entity.Id) && i.AuditPropertyId == auditProperty.Id);
 
                 // set properties back to pre-edit versions
                 foreach (var auditItem in auditItems)
@@ -328,9 +422,6 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         /// </summary>
         private void UpdateAuditUserAndDateFields()
         {
-            DateTime now = DateTime.Now;
-
-
             // set created and last changed fields for added entities
             var addedEntities = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntries(System.Data.Entity.EntityState.Added).Where(ose => !ose.IsRelationship);
             //var addedEntities = ChangeTracker.Entries().Where(e => e.State == EntityState.Added);
@@ -339,10 +430,10 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                 IAuditUserAndDate<TKey> entity = item.Entity as IAuditUserAndDate<TKey>;
                 if (entity != null)
                 {
-                    entity.CreatedDate = now;
-                    entity.CreatedBy = UserId;
-                    entity.LastChangedDate = now;
-                    entity.LastChangedBy = UserId;
+                    entity.CreatedDate = this.auditDate;
+                    entity.CreatedBy = this.userId;
+                    entity.LastChangedDate = this.auditDate;
+                    entity.LastChangedBy = this.userId;
                 }
             }
 
@@ -354,15 +445,15 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                 IAuditUserAndDate<TKey> entity = item.Entity as IAuditUserAndDate<TKey>;
                 if (entity != null)
                 {
-                    entity.LastChangedDate = now;
-                    entity.LastChangedBy = UserId;
+                    entity.LastChangedDate = this.auditDate;
+                    entity.LastChangedBy = this.userId;
                 }
             }
         }
 
         private void CreateAuditRecords()
         {
-            this.currentAudit = new TAudit() { AuditDate = DateTime.Now, HostId = this.HostId, HostName = this.HostName, UserId = this.UserId, UserName = this.UserName };
+            this.currentAudit = new TAudit() { AuditDate = this.auditDate, HostId = this.hostId, HostName = this.hostName, UserId = this.userId, UserName = this.userName };
             this.currentAuditProperties = new List<AuditProperty>();
             this.currentAuditItems = new List<TAuditItem>();
 
@@ -449,7 +540,7 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                             {
                                 var newObj = prop.GetValue(entity);
 
-                                newValue = newObj == null ? null : newObj.ToString();
+                                newValue = newObj == null || newObj == DBNull.Value ? null : newObj.ToString();
 
                                 if (newValue != oldValue)
                                 {
@@ -493,8 +584,8 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                                 var oldObj = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntry(entity).OriginalValues[prop.Name];
                                 var newObj = prop.GetValue(entity);
 
-                                oldValue = oldObj == null ? null : oldObj.ToString();
-                                newValue = newObj == null ? null : newObj.ToString();
+                                oldValue = oldObj == null || oldObj == DBNull.Value ? null : oldObj.ToString();
+                                newValue = newObj == null || newObj == DBNull.Value ? null : newObj.ToString();
 
                                 if (newValue != oldValue)
                                 {
@@ -540,8 +631,8 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                                 var oldObj = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntry(entity).OriginalValues[prop.Name];
                                 var newObj = prop.GetValue(entity);
 
-                                oldValue = oldObj == null ? null : oldObj.ToString();
-                                newValue = newObj == null ? null : newObj.ToString();
+                                oldValue = oldObj == null || oldObj == DBNull.Value ? null : oldObj.ToString();
+                                newValue = newObj == null || newObj == DBNull.Value ? null : newObj.ToString();
 
                                 if (newValue != oldValue)
                                 {
@@ -753,6 +844,32 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                 this.currentAuditProperties.Add(auditProperty);
             }
 
+            return auditProperty;
+        }
+
+        private AuditProperty GetAuditProperty(IAuditable<TKey> entity, string propertyName)
+        {
+            Contract.Requires<ArgumentNullException>(entity != null, "entity");
+            Contract.Requires<ArgumentNullException>(!propertyName.IsNullOrWhiteSpace(), "propertyName");
+            //x Contract.Ensures(Contract.Result<AuditProperty>() != null);
+
+            string entityName = GetEntityTypeName(entity); // ObjectContext.GetObjectType(entity.GetType()).Name;
+
+            // check our list
+            AuditProperty auditProperty = this.currentAuditProperties.FirstOrDefault(ap => ap.EntityName == entityName && ap.PropertyName == propertyName);
+
+            if (auditProperty == null)
+            {
+                // check the database
+                auditProperty = this.AuditProperties.FirstOrDefault(ap => ap.EntityName == entityName && ap.PropertyName == propertyName);
+
+                if (auditProperty != null)
+                {
+                    this.currentAuditProperties.Add(auditProperty);
+                }
+            }
+
+            // might return null
             return auditProperty;
         }
 
