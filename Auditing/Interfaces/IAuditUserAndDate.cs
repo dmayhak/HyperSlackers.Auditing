@@ -13,16 +13,4 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         DateTime LastChangedDate { get; set; }
         TKey LastChangedBy { get; set; }
     }
-
-    //public interface IAuditAuditUserAndDateGuid : IAuditUserAndDate<Guid>
-    //{
-    //}
-
-    //public interface IAuditAuditUserAndDateInt : IAuditUserAndDate<int>
-    //{
-    //}
-
-    //public interface IAuditAuditUserAndDateLong : IAuditUserAndDate<long>
-    //{
-    //}
 }

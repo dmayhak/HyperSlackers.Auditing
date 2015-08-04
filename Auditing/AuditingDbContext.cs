@@ -17,6 +17,21 @@ using System.ComponentModel;
 
 namespace HyperSlackers.AspNet.Identity.EntityFramework
 {
+    /// <summary>
+    /// Generic IdentityDbContext base that can be customized with entity types that
+    /// extend from the base IdentityUserXXX types.
+    /// Automatically adds entities for creatign audit entries in the DbContext.
+    /// Entities inheriting from IAuditable or IAuditableUSerAndDate will have property changes
+    /// recorded in the audit tables automatically.
+    /// </summary>
+    /// <typeparam name="TUser">The type of the user.</typeparam>
+    /// <typeparam name="TRole">The type of the role.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <typeparam name="TUserLogin">The type of the user login.</typeparam>
+    /// <typeparam name="TUserRole">The type of the user role.</typeparam>
+    /// <typeparam name="TUserClaim">The type of the user claim.</typeparam>
+    /// <typeparam name="TAudit">The type of the audit.</typeparam>
+    /// <typeparam name="TAuditItem">The type of the audit item.</typeparam>
     public class AuditingDbContext<TUser, TRole, TKey, TUserLogin, TUserRole, TUserClaim, TAudit, TAuditItem> : IdentityDbContext<TUser, TRole, TKey, TUserLogin, TUserRole, TUserClaim>
         where TKey : IEquatable<TKey>
         where TUser : Microsoft.AspNet.Identity.EntityFramework.IdentityUser<TKey, TUserLogin, TUserRole, TUserClaim>, new()
@@ -27,10 +42,16 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         where TAudit : Audit<TKey>, new()
         where TAuditItem : AuditItem<TKey>, new()
     {
-        private static bool disableAuditing = false;
+        private bool disableAuditing = false;
         private bool auditFieldsInitialized = false;
         // lazy load these guys so we don't have to force them as constructor params or call virtual method in constructor
         private TKey hostId; // only used for multi-host systems
+        /// <summary>
+        /// Gets or sets the host identifier. Only used/needed in MultiHost systems.
+        /// </summary>
+        /// <value>
+        /// The host identifier.
+        /// </value>
         public TKey HostId
         {
             get
@@ -48,6 +69,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
         private string hostName;
+        /// <summary>
+        /// Gets or sets the name of the host. Only used/needed in MultiHost systems.
+        /// </summary>
+        /// <value>
+        /// The name of the host.
+        /// </value>
         public string HostName
         {
             get
@@ -65,6 +92,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
         private TKey userId;
+        /// <summary>
+        /// Gets or sets the user identifier.
+        /// </summary>
+        /// <value>
+        /// The user identifier.
+        /// </value>
         public TKey UserId
         {
             get
@@ -82,6 +115,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
         private string userName;
+        /// <summary>
+        /// Gets or sets the name of the user.
+        /// </summary>
+        /// <value>
+        /// The name of the user.
+        /// </value>
         public string UserName
         {
             get
@@ -100,35 +139,90 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         }
         public DateTime auditDate;
 
-        // table/schema renaming
+        //! table/schema renaming
+        /// <summary>
+        /// Gets the name of the audit schema.
+        /// </summary>
+        /// <value>
+        /// The name of the audit schema.
+        /// </value>
         public virtual string AuditSchemaName { get { return ""; } }
+        /// <summary>
+        /// Gets the name of the audits table.
+        /// </summary>
+        /// <value>
+        /// The name of the audits table.
+        /// </value>
         public virtual string AuditsTableName { get { return "AspNetAudits"; } }
+        /// <summary>
+        /// Gets the name of the audit items table.
+        /// </summary>
+        /// <value>
+        /// The name of the audit items table.
+        /// </value>
         public virtual string AuditItemsTableName { get { return "AspNetAuditItems"; } }
+        /// <summary>
+        /// Gets the name of the audit properties table.
+        /// </summary>
+        /// <value>
+        /// The name of the audit properties table.
+        /// </value>
         public virtual string AuditPropertiesTableName { get { return "AspNetAuditProperties"; } }
 
-        // audit tracking
+        //! audit tracking
         private TAudit currentAudit;
         private List<TAuditItem> currentAuditItems;
         private List<AuditProperty> currentAuditProperties;
 
-        // audit dbsets
+        //! audit dbsets
+        /// <summary>
+        /// The Audits DbSet.
+        /// </summary>
+        /// <value>
+        /// The audits.
+        /// </value>
         public DbSet<TAudit> Audits { get; set; }
+        /// <summary>
+        /// The AuditItems DbSets.
+        /// </summary>
+        /// <value>
+        /// The audit items.
+        /// </value>
         public DbSet<TAuditItem> AuditItems { get; set; }
+        /// <summary>
+        /// The AuditProperties DbSet.
+        /// </summary>
+        /// <value>
+        /// The audit properties.
+        /// </value>
         public DbSet<AuditProperty> AuditProperties { get; set; }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuditingDbContext{TUser, TRole, TKey, TUserLogin, TUserRole, TUserClaim, TAudit, TAuditItem}"/> class.
+        /// </summary>
         protected AuditingDbContext()
             : this("DefaultConnection")
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AuditingDbContext{TUser, TRole, TKey, TUserLogin, TUserRole, TUserClaim, TAudit, TAuditItem}"/> class.
+        /// </summary>
+        /// <param name="nameOrConnectionString">The name or connection string.</param>
         protected AuditingDbContext(string nameOrConnectionString)
             : base(nameOrConnectionString)
         {
             Contract.Requires<ArgumentNullException>(!nameOrConnectionString.IsNullOrWhiteSpace(), "nameOrConnectionString");
         }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether auditing is currently enabled or not.
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if auditing is enabled; otherwise, <c>false</c>.
+        /// </value>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool DisableAuditing
+        public bool DisableAuditing
         {
             get
             {
@@ -140,11 +234,19 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Gets the host identifier.
+        /// </summary>
+        /// <returns></returns>
         protected virtual TKey GetHostId()
         {
             return default(TKey);
         }
 
+        /// <summary>
+        /// Gets the name of the host.
+        /// </summary>
+        /// <returns></returns>
         protected virtual string GetHostName()
         {
             try
@@ -175,6 +277,10 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return "<system>";
         }
 
+        /// <summary>
+        /// Gets the user identifier.
+        /// </summary>
+        /// <returns></returns>
         protected virtual TKey GetUserId()
         {
             var userName = GetUserName();
@@ -193,28 +299,35 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return default(TKey);
         }
 
+        /// <summary>
+        /// Gets the name of the user.
+        /// </summary>
+        /// <returns></returns>
         protected virtual string GetUserName()
         {
-            System.Web.HttpContext context = System.Web.HttpContext.Current;
-            if (context != null)
+            try
             {
-                // web application
-                if (context.User != null)
+                System.Web.HttpContext context = System.Web.HttpContext.Current;
+                if (context != null)
                 {
-                    return context.User.Identity.Name;
+                    // web application
+                    if (context.User != null)
+                    {
+                        return context.User.Identity.Name;
+                    }
+                }
+                else
+                {
+                    // windows application
+                    var user = System.Security.Principal.WindowsIdentity.GetCurrent();
+
+                    return user.Name;
                 }
             }
-            else
+            catch (Exception ex)
             {
-                // windows application
-                var user = System.Security.Principal.WindowsIdentity.GetCurrent();
-
-                if (user.Name.Contains("\\"))
-                {
-                    return user.Name.Substring(user.Name.IndexOf("\\") + 1);
-                }
-
-                return user.Name;
+                // hopefully we only hit this when creating the migration and db does not exist
+                System.Diagnostics.Debug.WriteLine(ex.Message);
             }
 
             return "<system>";
@@ -293,6 +406,11 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return changesCount;
         }
 
+        /// <summary>
+        /// Gets the entity edit points.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <returns></returns>
         public EntityEditPoint<TKey>[] GetEntityEditPoints(IAuditable<TKey> entity)
         {
             var auditIds = this.AuditItems
@@ -308,6 +426,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
                 .ToArray();
         }
 
+        /// <summary>
+        /// Gets the entity versions.
+        /// </summary>
+        /// <typeparam name="TEntity">The type of the entity.</typeparam>
+        /// <param name="entity">The entity.</param>
+        /// <returns></returns>
         public EntityVersion<TKey, TEntity>[] GetEntityVersions<TEntity>(TEntity entity)
             where TEntity : IAuditable<TKey>
         {
@@ -351,6 +475,13 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return versions.ToArray();
         }
 
+        /// <summary>
+        /// Gets the entity property versions.
+        /// </summary>
+        /// <typeparam name="TEntity">The type of the entity.</typeparam>
+        /// <param name="entity">The entity.</param>
+        /// <param name="propertyName">Name of the property.</param>
+        /// <returns></returns>
         public EntityPropertyVersion<TKey>[] GetEntityPropertyVersions<TEntity>(TEntity entity, string propertyName)
             where TEntity : IAuditable<TKey>
         {
@@ -392,6 +523,11 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return versions.ToArray();
         }
 
+        /// <summary>
+        /// Sets the entity property.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <param name="auditItem">The audit item.</param>
         private void SetEntityProperty(IAuditable<TKey> entity, AuditItem<TKey> auditItem)
         {
             Contract.Requires<ArgumentNullException>(entity != null, "entity");
@@ -451,6 +587,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Creates the audit records.
+        /// </summary>
         private void CreateAuditRecords()
         {
             this.currentAudit = new TAudit() { AuditDate = this.auditDate, HostId = this.hostId, HostName = this.hostName, UserId = this.userId, UserName = this.userName };
@@ -464,6 +603,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             CreateAuditDeleteRelationRecords();
         }
 
+        /// <summary>
+        /// Appends the audit records to context.
+        /// </summary>
         private void AppendAuditRecordsToContext()
         {
             if (this.currentAuditItems == null || this.currentAuditItems.Count == 0)
@@ -517,6 +659,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Creates the audit insert records.
+        /// </summary>
         private void CreateAuditInsertRecords()
         {
             var entities = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntries(System.Data.Entity.EntityState.Added).Where(ose => !ose.IsRelationship);
@@ -560,6 +705,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Creates the audit update records.
+        /// </summary>
         private void CreateAuditUpdateRecords()
         {
             var entities = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntries(System.Data.Entity.EntityState.Modified).Where(ose => !ose.IsRelationship);
@@ -606,6 +754,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Creates the audit delete records.
+        /// </summary>
         private void CreateAuditDeleteRecords()
         {
             // audit deleted items
@@ -652,6 +803,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Creates the audit add relation records.
+        /// </summary>
         private void CreateAuditAddRelationRecords()
         {
             var relations = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntries(System.Data.Entity.EntityState.Added).Where(ose => ose.IsRelationship);
@@ -696,6 +850,9 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Creates the audit delete relation records.
+        /// </summary>
         private void CreateAuditDeleteRelationRecords()
         {
             // audit deleted relationships
@@ -741,6 +898,11 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             }
         }
 
+        /// <summary>
+        /// Gets the type of the entity.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <returns></returns>
         private static Type GetEntityType(IAuditable<TKey> entity)
         {
             Contract.Requires<ArgumentNullException>(entity != null, "entity");
@@ -758,6 +920,11 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return type;
         }
 
+        /// <summary>
+        /// Gets the name of the entity type.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <returns></returns>
         private static string GetEntityTypeName(IAuditable<TKey> entity)
         {
             Contract.Requires<ArgumentNullException>(entity != null, "entity");
@@ -768,6 +935,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return type.Name;
         }
 
+        /// <summary>
+        /// Gets the audit property.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <param name="prop">The property.</param>
+        /// <returns></returns>
         private AuditProperty GetAuditProperty(IAuditable<TKey> entity, PropertyInfo prop)
         {
             Contract.Requires<ArgumentNullException>(entity != null, "entity");
@@ -847,6 +1020,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return auditProperty;
         }
 
+        /// <summary>
+        /// Gets the audit property.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <param name="propertyName">Name of the property.</param>
+        /// <returns></returns>
         private AuditProperty GetAuditProperty(IAuditable<TKey> entity, string propertyName)
         {
             Contract.Requires<ArgumentNullException>(entity != null, "entity");
@@ -873,6 +1052,11 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
             return auditProperty;
         }
 
+        /// <summary>
+        /// Gets the audit property.
+        /// </summary>
+        /// <param name="relation">The relation.</param>
+        /// <returns></returns>
         private AuditProperty GetAuditProperty(System.Data.Entity.Core.Objects.DataClasses.IRelatedEnd relation)
         {
             Contract.Requires<ArgumentNullException>(relation != null, "relation");
@@ -929,6 +1113,12 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
         //    return auditProperty;
         //}
 
+        /// <summary>
+        /// Gets the entity entry from relation.
+        /// </summary>
+        /// <param name="relationEntry">The relation entry.</param>
+        /// <param name="index">The index.</param>
+        /// <returns></returns>
         private ObjectStateEntry GetEntityEntryFromRelation(ObjectStateEntry relationEntry, int index)
         {
             Contract.Requires<ArgumentNullException>(relationEntry != null, "relationEntry");

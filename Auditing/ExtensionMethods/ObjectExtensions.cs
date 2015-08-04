@@ -11,6 +11,12 @@ namespace System
     {
         private readonly static object lockObject = new object();
 
+        /// <summary>
+        /// Creates a copy of the specified object by copying valueType property values.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="original">The original.</param>
+        /// <returns></returns>
         public static T Copy<T>(this T original)
         {
             try

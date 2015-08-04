@@ -202,8 +202,6 @@
     <Compile Include="Entities\EntityVersion.cs" />
     <Compile Include="ExtensionMethods\ObjectExtensions.cs" />
     <Compile Include="ExtensionMethods\StringExtensions.cs" />
-    <Compile Include="IEntity.cs" />
-    <Compile Include="IAuditableEntity.cs" />
     <Compile Include="Interfaces\IAuditable.cs" />
     <Compile Include="Interfaces\IAuditUserAndDate.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

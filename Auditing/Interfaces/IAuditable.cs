@@ -10,16 +10,4 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework
     {
         TKey Id { get; set; }
     }
-
-    //public interface IAuditableGuid : IAuditable<Guid>
-    //{
-    //}
-
-    //public interface IAuditableInt : IAuditable<int>
-    //{
-    //}
-
-    //public interface IAuditableLong : IAuditable<long>
-    //{
-    //}
 }
