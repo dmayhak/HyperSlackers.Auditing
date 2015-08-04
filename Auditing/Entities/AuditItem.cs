@@ -98,4 +98,19 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework.Entities
         [NotMapped]
         internal IAuditable<TKey> Entity2 { get; set; }
     }
+
+    public class AuditItemGuid : AuditItem<Guid>
+    {
+
+    }
+
+    public class AuditItemInt : AuditItem<int>
+    {
+
+    }
+
+    public class AuditItemLong : AuditItem<long>
+    {
+
+    }
 }

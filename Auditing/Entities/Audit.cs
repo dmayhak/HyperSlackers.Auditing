@@ -70,4 +70,19 @@ namespace HyperSlackers.AspNet.Identity.EntityFramework.Entities
         [Index("IX_Date_Id", 0)]
         public DateTime AuditDate { get; set; }
     }
+
+    public class AuditGuid : Audit<Guid>
+    {
+
+    }
+
+    public class AuditInt : Audit<int>
+    {
+
+    }
+
+    public class AuditLong : Audit<long>
+    {
+
+    }
 }
